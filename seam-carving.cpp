@@ -35,7 +35,7 @@ Mat createEnergyImage(Mat &image) {
     GaussianBlur(image, image_blur, Size(3,3), 0, 0, BORDER_DEFAULT);
     
     // convert to grayscale
-    cvtColor(image_blur, image_gray, CV_BGR2GRAY);
+    cvtColor(image_blur, image_gray, COLOR_RGB2GRAY);
     
     // use Sobel to calculate the gradient of the image in the x and y direction
     //Sobel(image_gray, grad_x, ddepth, 1, 0, 3, scale, delta, BORDER_DEFAULT);
@@ -57,7 +57,7 @@ Mat createEnergyImage(Mat &image) {
     
     // create and show the newly created energy image
     if (demo) {
-        namedWindow("Energy Image", CV_WINDOW_AUTOSIZE); imshow("Energy Image", energy_image);
+        namedWindow("Energy Image", WINDOW_AUTOSIZE); imshow("Energy Image", energy_image);
     }
     
     // calculate time taken
@@ -116,7 +116,7 @@ Mat createCumulativeEnergyMap(Mat &energy_image, SeamDirection seam_direction) {
         cumulative_energy_map.convertTo(color_cumulative_energy_map, CV_8UC1, scale);
         applyColorMap(color_cumulative_energy_map, color_cumulative_energy_map, cv::COLORMAP_JET);
         
-        namedWindow("Cumulative Energy Map", CV_WINDOW_AUTOSIZE); imshow("Cumulative Energy Map", color_cumulative_energy_map);
+        namedWindow("Cumulative Energy Map", WINDOW_AUTOSIZE); imshow("Cumulative Energy Map", color_cumulative_energy_map);
     }
     
     // calculate time taken
@@ -277,7 +277,7 @@ void reduce(Mat &image, vector<int> path, SeamDirection seam_direction) {
     }
    
     if (demo) {
-        namedWindow("Reduced Image", CV_WINDOW_AUTOSIZE); imshow("Reduced Image", image);
+        namedWindow("Reduced Image", WINDOW_AUTOSIZE); imshow("Reduced Image", image);
     }
     
     // calculate time taken
@@ -299,13 +299,13 @@ void showPath(Mat &energy_image, vector<int> path, SeamDirection seam_direction)
     }
     
     // display the seam on top of the energy image
-    namedWindow("Seam on Energy Image", CV_WINDOW_AUTOSIZE); imshow("Seam on Energy Image", energy_image);
+    namedWindow("Seam on Energy Image", WINDOW_AUTOSIZE); imshow("Seam on Energy Image", energy_image);
 }
 
 void driver(Mat &image, SeamDirection seam_direction, int iterations) {
     clock_t start = clock();
     
-    namedWindow("Original Image", CV_WINDOW_AUTOSIZE); imshow("Original Image", image);
+    namedWindow("Original Image", WINDOW_AUTOSIZE); imshow("Original Image", image);
     
     // perform the specified number of reductions
     for (int i = 0; i < iterations; i++) {
@@ -330,7 +330,7 @@ void driver(Mat &image, SeamDirection seam_direction, int iterations) {
         cout << "total time taken: "; cout << fixed; cout << setprecision(7); cout << total_time << endl;
     }
     
-    namedWindow("Reduced Image", CV_WINDOW_AUTOSIZE); imshow("Reduced Image", image); waitKey(0);
+    namedWindow("Reduced Image", WINDOW_AUTOSIZE); imshow("Reduced Image", image); waitKey(0);
     imwrite("result.jpg", image);
 }
 
