@@ -141,12 +141,56 @@ Mat createCumulativeEnergyMap(Mat &energy_image, SeamDirection seam_direction) {
         }
     }
     else if (seam_direction == HORIZONTAL) {
-        for (int col = 1; col < colsize; col++) {
-            for (int row = 0; row < rowsize; row++) {
-                a = cumulative_energy_map.at<double>(max(row - 1, 0), col - 1);
-                b = cumulative_energy_map.at<double>(row, col - 1);
-                c = cumulative_energy_map.at<double>(min(row + 1, rowsize - 1), col - 1);
+        const int JUMP = 90; // choose something even
+        const int BASE = (JUMP - 1) * 2;
+        // for (int col = 1; col < colsize; col++) {
+        //     #pragma omp parallel for private(a, b, c)
+        //     for (int row = 0; row < rowsize; row++) {
+        //         a = cumulative_energy_map.at<double>(max(row - 1, 0), col - 1);
+        //         b = cumulative_energy_map.at<double>(row, col - 1);
+        //         c = cumulative_energy_map.at<double>(min(row + 1, rowsize - 1), col - 1);
                 
+        //         cumulative_energy_map.at<double>(row, col) = energy_image.at<double>(row, col) + std::min(a, min(b, c));
+        //     }
+        // }
+        int col_start;
+        for (col_start = 1; col_start + JUMP - 1 < colsize; col_start += JUMP) {
+            #pragma omp parallel for private(a, b, c)
+            for (int top_triangle = 0; top_triangle < (colsize + BASE - 1) / BASE; top_triangle++) {
+                for (int col = col_start; col < col_start + JUMP - 1; col++) {
+                    int first = top_triangle * BASE + col - col_start;
+                    int last = (top_triangle + 1) * BASE - col + col_start;
+                    for (int row = first; row < min(last, colsize); row++) {
+                        a = cumulative_energy_map.at<double>(row - 1, max(col - 1, 0));
+                        b = cumulative_energy_map.at<double>(row - 1, col);
+                        c = cumulative_energy_map.at<double>(row - 1, min(col + 1, colsize - 1));
+
+                        cumulative_energy_map.at<double>(row, col) = energy_image.at<double>(row, col) + std::min(a, min(b, c));
+                    }
+                }
+            }
+            #pragma omp parallel for private(a, b, c)
+            for (int bottom_triangle = 0; bottom_triangle < (colsize + BASE - 1 + JUMP - 1) / BASE; bottom_triangle++) {
+                for (int col = col_start + 1; col < col_start + JUMP; col++) {
+                    int first = bottom_triangle * BASE - (col - col_start);
+                    int last = bottom_triangle * BASE + (col - col_start);
+                    for (int row = max(0, first); row < min(last, colsize); row++) {
+                        a = cumulative_energy_map.at<double>(row - 1, max(col - 1, 0));
+                        b = cumulative_energy_map.at<double>(row - 1, col);
+                        c = cumulative_energy_map.at<double>(row - 1, min(col + 1, colsize - 1));
+
+                        cumulative_energy_map.at<double>(row, col) = energy_image.at<double>(row, col) + std::min(a, min(b, c));
+                    }
+                }
+            }
+        }
+        for (int col = col_start; col < colsize; col++) {
+            #pragma omp parallel for private(a, b, c)
+            for (int row = 0; row < rowsize; row++) {
+                a = cumulative_energy_map.at<double>(row - 1, max(col - 1, 0));
+                b = cumulative_energy_map.at<double>(row - 1, col);
+                c = cumulative_energy_map.at<double>(row - 1, min(col + 1, colsize - 1));
+
                 cumulative_energy_map.at<double>(row, col) = energy_image.at<double>(row, col) + std::min(a, min(b, c));
             }
         }
