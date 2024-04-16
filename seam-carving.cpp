@@ -6,7 +6,8 @@
 #include <string>
 #include <algorithm>
 #include <vector>
-#include <time.h>
+#include <chrono>
+#include <omp.h>
 
 using namespace cv;
 using namespace std;
@@ -22,7 +23,7 @@ bool demo;
 bool debug;
 
 Mat createEnergyImage(Mat &image) {
-    clock_t start = clock();
+    auto start = std::chrono::high_resolution_clock::now();
     Mat image_blur, image_gray;
     Mat grad_x, grad_y;
     Mat abs_grad_x, abs_grad_y;
@@ -61,14 +62,15 @@ Mat createEnergyImage(Mat &image) {
     }
     
     // calculate time taken
-    clock_t end = clock();
-    energy_image_time += ((float)end - (float)start) / CLOCKS_PER_SEC;
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end - start;
+    energy_image_time += elapsed.count();
     
     return energy_image;
 }
 
 Mat createCumulativeEnergyMap(Mat &energy_image, SeamDirection seam_direction) {
-    clock_t start = clock();
+    auto start = std::chrono::high_resolution_clock::now();
     double a,b,c;
     
     // get the numbers of rows and columns in the image
@@ -85,6 +87,7 @@ Mat createCumulativeEnergyMap(Mat &energy_image, SeamDirection seam_direction) {
     // take the minimum of the three neighbors and add to total, this creates a running sum which is used to determine the lowest energy path
     if (seam_direction == VERTICAL) {
         for (int row = 1; row < rowsize; row++) {
+            //#pragma omp parallel for private(a, b, c)
             for (int col = 0; col < colsize; col++) {
                 a = cumulative_energy_map.at<double>(row - 1, max(col - 1, 0));
                 b = cumulative_energy_map.at<double>(row - 1, col);
@@ -120,14 +123,15 @@ Mat createCumulativeEnergyMap(Mat &energy_image, SeamDirection seam_direction) {
     }
     
     // calculate time taken
-    clock_t end = clock();
-    cumulative_energy_map_time += ((float)end - (float)start) / CLOCKS_PER_SEC;
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end - start;
+    cumulative_energy_map_time += elapsed.count();
     
     return cumulative_energy_map;
 }
 
 vector<int> findOptimalSeam(Mat &cumulative_energy_map, SeamDirection seam_direction) {
-    clock_t start = clock();
+    auto start = std::chrono::high_resolution_clock::now();
     double a,b,c;
     int offset = 0;
     vector<int> path;
@@ -207,14 +211,15 @@ vector<int> findOptimalSeam(Mat &cumulative_energy_map, SeamDirection seam_direc
     }
     
     // calculate time taken
-    clock_t end = clock();
-    find_seam_time += ((float)end - (float)start) / CLOCKS_PER_SEC;
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end - start;
+    find_seam_time += elapsed.count();
     
     return path;
 }
 
 void reduce(Mat &image, vector<int> path, SeamDirection seam_direction) {
-    clock_t start = clock();
+    auto start = std::chrono::high_resolution_clock::now();
     
     // get the number of rows and columns in the image
     int rowsize = image.rows;
@@ -281,8 +286,9 @@ void reduce(Mat &image, vector<int> path, SeamDirection seam_direction) {
     }
     
     // calculate time taken
-    clock_t end = clock();
-    reduce_time += ((float)end - (float)start) / CLOCKS_PER_SEC;
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end - start;
+    reduce_time += elapsed.count();
 }
 
 void showPath(Mat &energy_image, vector<int> path, SeamDirection seam_direction) {
@@ -303,7 +309,7 @@ void showPath(Mat &energy_image, vector<int> path, SeamDirection seam_direction)
 }
 
 void driver(Mat &image, SeamDirection seam_direction, int iterations) {
-    clock_t start = clock();
+    auto start = std::chrono::high_resolution_clock::now();
     
     namedWindow("Original Image", WINDOW_AUTOSIZE); imshow("Original Image", image);
     
@@ -320,8 +326,9 @@ void driver(Mat &image, SeamDirection seam_direction, int iterations) {
     
     // calculate and output time taken
     if (debug) {
-        clock_t end = clock();
-        float total_time = ((float)end - (float)start) / CLOCKS_PER_SEC;
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed = end - start;
+        float total_time = elapsed.count();
         cout << "Final image size: " << image.rows << "x" << image.cols << endl;
         cout << "energy image time taken: "; cout << fixed; cout << setprecision(7); cout << energy_image_time << endl;
         cout << "cumulative energy map time taken: "; cout << fixed; cout << setprecision(7); cout << cumulative_energy_map_time << endl;
@@ -388,7 +395,7 @@ int main() {
     }
 
     demo = false;
-    debug = false;
+    debug = true;
     
     if (demo) iterations = 1;
     
