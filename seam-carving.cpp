@@ -86,6 +86,8 @@ Mat createCumulativeEnergyMap(Mat &energy_image, SeamDirection seam_direction) {
     
     // take the minimum of the three neighbors and add to total, this creates a running sum which is used to determine the lowest energy path
     if (seam_direction == VERTICAL) {
+        const int JUMP = 90; // choose something even
+        const int BASE = (JUMP - 1) * 2;
         // for (int row = 1; row < rowsize; row++) {
         //     #pragma omp parallel for private(a, b, c)
         //     for (int col = 0; col < colsize; col++) {
@@ -97,12 +99,12 @@ Mat createCumulativeEnergyMap(Mat &energy_image, SeamDirection seam_direction) {
         //     }
         // }
         int row_start;
-        for (row_start = 1; row_start + 3 < rowsize; row_start += 4) {
+        for (row_start = 1; row_start + JUMP - 1 < rowsize; row_start += JUMP) {
             #pragma omp parallel for private(a, b, c)
-            for (int top_triangle = 0; top_triangle < (colsize + 5) / 6; top_triangle++) {
-                for (int row = row_start; row < row_start + 3; row++) {
-                    int first = top_triangle * 6 + row - row_start;
-                    int last = (top_triangle + 1) * 6 - row + row_start;
+            for (int top_triangle = 0; top_triangle < (colsize + BASE - 1) / BASE; top_triangle++) {
+                for (int row = row_start; row < row_start + JUMP - 1; row++) {
+                    int first = top_triangle * BASE + row - row_start;
+                    int last = (top_triangle + 1) * BASE - row + row_start;
                     for (int col = first; col < min(last, colsize); col++) {
                         a = cumulative_energy_map.at<double>(row - 1, max(col - 1, 0));
                         b = cumulative_energy_map.at<double>(row - 1, col);
@@ -113,10 +115,10 @@ Mat createCumulativeEnergyMap(Mat &energy_image, SeamDirection seam_direction) {
                 }
             }
             #pragma omp parallel for private(a, b, c)
-            for (int bottom_triangle = 0; bottom_triangle < (colsize + 8) / 6; bottom_triangle++) {
-                for (int row = row_start + 1; row < row_start + 4; row++) {
-                    int first = bottom_triangle * 6 - (row - row_start);
-                    int last = bottom_triangle * 6 + (row - row_start);
+            for (int bottom_triangle = 0; bottom_triangle < (colsize + BASE - 1 + JUMP - 1) / BASE; bottom_triangle++) {
+                for (int row = row_start + 1; row < row_start + JUMP; row++) {
+                    int first = bottom_triangle * BASE - (row - row_start);
+                    int last = bottom_triangle * BASE + (row - row_start);
                     for (int col = max(0, first); col < min(last, colsize); col++) {
                         a = cumulative_energy_map.at<double>(row - 1, max(col - 1, 0));
                         b = cumulative_energy_map.at<double>(row - 1, col);
