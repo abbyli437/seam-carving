@@ -8,9 +8,11 @@
 #include <vector>
 #include <chrono>
 #include <omp.h>
+#include <Magick++.h>
 
 using namespace cv;
 using namespace std;
+using namespace Magick;
 
 enum SeamDirection { VERTICAL, HORIZONTAL };
 
@@ -21,6 +23,7 @@ float reduce_time = 0;
 
 bool demo;
 bool debug;
+bool save_gif;
 
 Mat createEnergyImage(Mat &image) {
     auto start = std::chrono::high_resolution_clock::now();
@@ -400,6 +403,10 @@ void driver(Mat &image, SeamDirection seam_direction, int iterations) {
     
     namedWindow("Original Image", WINDOW_AUTOSIZE); imshow("Original Image", image);
     
+    // set up gif resources
+    InitializeMagick("");
+    vector<Image> frames;
+    
     // perform the specified number of reductions
     for (int i = 0; i < iterations; i++) {
         Mat energy_image = createEnergyImage(image);
@@ -408,6 +415,13 @@ void driver(Mat &image, SeamDirection seam_direction, int iterations) {
         reduce(image, path, seam_direction);
         if (demo) {
             showPath(energy_image, path, seam_direction);
+        }
+        if (save_gif) {
+            imwrite("result.jpg", image);
+            Image tmp;
+            tmp.read("result.jpg");
+            tmp.animationDelay(5);
+            frames.push_back(tmp);
         }
     }
     
@@ -426,10 +440,14 @@ void driver(Mat &image, SeamDirection seam_direction, int iterations) {
     
     namedWindow("Reduced Image", WINDOW_AUTOSIZE); imshow("Reduced Image", image); waitKey(0);
     imwrite("result.jpg", image);
+
+    if (save_gif) {
+        writeImages(frames.begin(), frames.end(), "output.gif");
+    }
 }
 
 int main() {
-    string filename, reduce_direction, width_height, s_iterations;
+    string filename, reduce_direction, width_height, s_iterations, gif;
     SeamDirection seam_direction;
     int iterations;
     
@@ -462,6 +480,10 @@ int main() {
     
     cout << "Reduce " << width_height << " how many times? ";
     cin >> s_iterations;
+
+    cout << "Would you like to save as gif? (1 for yes | 0 for no) ";
+    cin >> gif;
+    save_gif = (gif == "1");
     
     iterations = stoi(s_iterations);
     int rowsize = image.rows;
