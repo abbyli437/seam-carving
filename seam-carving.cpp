@@ -235,13 +235,39 @@ vector<int> findOptimalSeam(Mat &cumulative_energy_map, SeamDirection seam_direc
     if (seam_direction == VERTICAL) {
         // copy the data from the last row of the cumulative energy map
         Mat row = cumulative_energy_map.row(rowsize - 1);
+
+        std::vector<double> vec;
+        row.copyTo(vec);
+        int firstMinIndex = 0;
+        int secondMinIndex = 1;
+        double firstMin = vec[0];
+        double secondMin = vec[1];
+
+        if (vec[1] < vec[0]) {
+            firstMinIndex = 1;
+            secondMinIndex = 0;
+            firstMin = vec[1];
+            secondMin = vec[0];
+        }
+
+        for (size_t i = 2; i < vec.size(); ++i) {
+            if (vec[i] < firstMin) {
+                secondMin = firstMin;
+                secondMinIndex = firstMinIndex;
+                firstMin = vec[i];
+                firstMinIndex = i;
+            } else if (vec[i] < secondMin) {
+                secondMin = vec[i];
+                secondMinIndex = i;
+            }
+        }
     
         // get min and max values and locations
-        minMaxLoc(row, &min_val, &max_val, &min_pt, &max_pt);
+        // minMaxLoc(row, &min_val, &max_val, &min_pt, &max_pt);
         
         // initialize the path vector
         path.resize(rowsize);
-        int min_index = min_pt.x;
+        int min_index = firstMinIndex; //min_pt.x;
         path[rowsize - 1] = min_index;
         
         // starting from the bottom, look at the three adjacent pixels above current pixel, choose the minimum of those and add to the path
