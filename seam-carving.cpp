@@ -408,8 +408,8 @@ void reduce(Mat &image, vector<vector<int>> paths, SeamDirection seam_direction,
     int colsize = image.cols;
     
     // create a 1x1x3 dummy matrix to add onto the tail of a new row to maintain image dimensions and mark for deletion
-    Mat dummy(1, 1, CV_8UC3, Vec3b(0, 0, 0));
-    Mat dummy2(1, width, CV_8UC3, Vec3b(0, 0, 0));
+    Mat dummy_vertical(1, width, CV_8UC3, Vec3b(0, 0, 0));
+    Mat dummy_horizontal(width, 1, CV_8UC3, Vec3b(0, 0, 0));
     if (seam_direction == VERTICAL) { // reduce the width
         if (independent) {
              for (int i = 0; i < rowsize; i++) {
@@ -438,7 +438,7 @@ void reduce(Mat &image, vector<vector<int>> paths, SeamDirection seam_direction,
                 else if (!upper.empty()) {
                     new_row = upper;
                 }
-                hconcat(new_row, dummy2, new_row);
+                hconcat(new_row, dummy_vertical, new_row);
                 // take the newly formed row and place it into the original image
                 new_row.copyTo(image.row(i));
             }
@@ -465,14 +465,14 @@ void reduce(Mat &image, vector<vector<int>> paths, SeamDirection seam_direction,
                 // merge the two subrows and dummy matrix/pixel into a full row
                 if (!lower.empty() && !upper.empty()) {
                     hconcat(lower, upper, new_row);
-                    hconcat(new_row, dummy2, new_row);
+                    hconcat(new_row, dummy_vertical, new_row);
                 }
                 else {
                     if (lower.empty()) {
-                        hconcat(upper, dummy2, new_row);
+                        hconcat(upper, dummy_vertical, new_row);
                     }
                     else if (upper.empty()) {
-                        hconcat(lower, dummy2, new_row);
+                        hconcat(lower, dummy_vertical, new_row);
                     }
                 }
                 // take the newly formed row and place it into the original image
@@ -487,27 +487,38 @@ void reduce(Mat &image, vector<vector<int>> paths, SeamDirection seam_direction,
         for (int i = 0; i < colsize; i++) {
             // take all pixels to the top and bottom of marked pixel and store the in appropriate subcolumn variables
             Mat new_col;
-            Mat lower = image.colRange(i, i + 1).rowRange(0, path[i]);
-            Mat upper = image.colRange(i, i + 1).rowRange(path[i] + 1, rowsize);
+            bool take_bottom = false;
+            if (path[i] < rowsize - width + 1) {
+                take_bottom = true;
+            }
+            Mat lower; 
+            Mat upper;
+            if (take_bottom) {
+                lower = image.colRange(i, i + 1).rowRange(0, path[i]);
+                upper = image.colRange(i, i + 1).rowRange(path[i] + width, rowsize);
+            } else {
+                lower = image.colRange(i, i + 1).rowRange(0, path[i] - width + 1);
+                upper = image.colRange(i, i + 1).rowRange(path[i] + 1, rowsize);
+            }
             
             // merge the two subcolumns and dummy matrix/pixel into a full row
             if (!lower.empty() && !upper.empty()) {
                 vconcat(lower, upper, new_col);
-                vconcat(new_col, dummy, new_col);
+                vconcat(new_col, dummy_horizontal, new_col);
             }
             else {
                 if (lower.empty()) {
-                    vconcat(upper, dummy, new_col);
+                    vconcat(upper, dummy_horizontal, new_col);
                 }
                 else if (upper.empty()) {
-                    vconcat(lower, dummy, new_col);
+                    vconcat(lower, dummy_horizontal, new_col);
                 }
             }
             // take the newly formed column and place it into the original image
             new_col.copyTo(image.col(i));
         }
         // clip the bottom-most side of the image
-        image = image.rowRange(0, rowsize - 1);
+        image = image.rowRange(0, rowsize - width);
     }
    
     if (demo) {
