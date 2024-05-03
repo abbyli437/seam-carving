@@ -220,11 +220,12 @@ Mat createCumulativeEnergyMap(Mat &energy_image, SeamDirection seam_direction) {
     return cumulative_energy_map;
 }
 
-vector<int> findOptimalSeam(Mat &cumulative_energy_map, SeamDirection seam_direction) {
+vector<vector<int>> findOptimalSeam(Mat &cumulative_energy_map, SeamDirection seam_direction) {
     auto start = std::chrono::high_resolution_clock::now();
     double a,b,c;
     int offset = 0;
     vector<int> path;
+    vector<int> second_path;
     double min_val, max_val;
     cv::Point min_pt, max_pt;
     
@@ -269,6 +270,10 @@ vector<int> findOptimalSeam(Mat &cumulative_energy_map, SeamDirection seam_direc
         path.resize(rowsize);
         int min_index = firstMinIndex; //min_pt.x;
         path[rowsize - 1] = min_index;
+
+        second_path.resize(rowsize);
+        int second_min_index = secondMinIndex;
+        second_path[rowsize - 1] = second_min_index;
         
         // starting from the bottom, look at the three adjacent pixels above current pixel, choose the minimum of those and add to the path
         for (int i = rowsize - 2; i >= 0; i--) {
@@ -289,6 +294,62 @@ vector<int> findOptimalSeam(Mat &cumulative_energy_map, SeamDirection seam_direc
             min_index += offset;
             min_index = min(max(min_index, 0), colsize - 1); // take care of edge cases
             path[i] = min_index;
+        }
+
+        for (int i = rowsize - 2; i >= 0; i--) {
+            if (second_min_index == 0) {
+                b = cumulative_energy_map.at<double>(i, second_min_index);
+                c = cumulative_energy_map.at<double>(i, second_min_index + 1);
+                if (path[i] == 0) {
+                    second_min_index = 1;
+                    second_path[i] = 1;
+                } else if (path[i] == 1 || b < c) {
+                    second_min_index = 0;
+                    second_path[i] = 0;
+                } else {
+                    second_min_index = 1;
+                    second_path[i] = 1;
+                }
+            } else if (second_min_index == colsize - 1) {
+                a = cumulative_energy_map.at<double>(i, second_min_index - 1);
+                b = cumulative_energy_map.at<double>(i, second_min_index);
+                if (path[i] == colsize - 2) {
+                    second_min_index = colsize - 1;
+                    second_path[i] = colsize - 1;
+                } else if (path[i] == colsize - 1 || a < b) {
+                    second_min_index = colsize - 2;
+                    second_path[i] = colsize - 2;
+                } else {
+                    second_min_index = colsize - 1;
+                    second_path[i] = colsize - 1;
+                }
+            } else {
+                a = cumulative_energy_map.at<double>(i, second_min_index - 1);
+                b = cumulative_energy_map.at<double>(i, second_min_index);
+                c = cumulative_energy_map.at<double>(i, second_min_index + 1);
+
+                if (path[i] == second_min_index - 1) {
+                    if (b < c) {
+                        offset = 0;
+                    } else {
+                        offset = 1;
+                    }
+                } else if (path[i] == second_min_index) {
+                    if (a < c) {
+                        offset = -1;
+                    } else {
+                        offset = 1;
+                    }
+                } else if (path[i] == second_min_index + 1) {
+                    if (a < b) {
+                        offset = -1;
+                    } else {
+                        offset = 0;
+                    }
+                }
+                second_min_index += offset;
+                second_path[i] = second_min_index;
+            }
         }
     }
     
@@ -331,10 +392,12 @@ vector<int> findOptimalSeam(Mat &cumulative_energy_map, SeamDirection seam_direc
     std::chrono::duration<double> elapsed = end - start;
     find_seam_time += elapsed.count();
     
-    return path;
+    return {path, second_path};
 }
 
-void reduce(Mat &image, vector<int> path, SeamDirection seam_direction) {
+void reduce(Mat &image, vector<vector<int>> paths, SeamDirection seam_direction) {
+    vector<int> path = paths[0];
+    vector<int> second_path = paths[1];
     auto start = std::chrono::high_resolution_clock::now();
     
     // get the number of rows and columns in the image
@@ -343,32 +406,71 @@ void reduce(Mat &image, vector<int> path, SeamDirection seam_direction) {
     
     // create a 1x1x3 dummy matrix to add onto the tail of a new row to maintain image dimensions and mark for deletion
     Mat dummy(1, 1, CV_8UC3, Vec3b(0, 0, 0));
+    Mat dummy2(1, 2, CV_8UC3, Vec3b(0, 0, 0));
     
     if (seam_direction == VERTICAL) { // reduce the width
+        // for (int i = 0; i < rowsize; i++) {
+        //     // take all pixels to the left and right of marked pixel and store them in appropriate subrow variables
+        //     Mat new_row;
+        //     Mat lower = image.rowRange(i, i + 1).colRange(0, path[i]);
+        //     Mat upper = image.rowRange(i, i + 1).colRange(path[i] + 1, colsize);
+            
+        //     // merge the two subrows and dummy matrix/pixel into a full row
+        //     if (!lower.empty() && !upper.empty()) {
+        //         hconcat(lower, upper, new_row);
+        //         hconcat(new_row, dummy, new_row);
+        //     }
+        //     else {
+        //         if (lower.empty()) {
+        //             hconcat(upper, dummy, new_row);
+        //         }
+        //         else if (upper.empty()) {
+        //             hconcat(lower, dummy, new_row);
+        //         }
+        //     }
+        //     // take the newly formed row and place it into the original image
+        //     new_row.copyTo(image.row(i));
+        // }
+        // // clip the right-most side of the image
+        // image = image.colRange(0, colsize - 1);
+
+
+
         for (int i = 0; i < rowsize; i++) {
             // take all pixels to the left and right of marked pixel and store them in appropriate subrow variables
             Mat new_row;
-            Mat lower = image.rowRange(i, i + 1).colRange(0, path[i]);
-            Mat upper = image.rowRange(i, i + 1).colRange(path[i] + 1, colsize);
-            
+            // Mat lower = image.rowRange(i, i + 1).colRange(0, path[i]);
+            // Mat upper = image.rowRange(i, i + 1).colRange(path[i] + 1, colsize);
+            //cout << path[i] << " " << second_path[i] << endl;
+            Mat lower = image.rowRange(i, i + 1).colRange(0, min(path[i], second_path[i]));
+            Mat middle = image.rowRange(i, i + 1).colRange(min(path[i], second_path[i]) + 1, max(path[i], second_path[i]));
+            Mat upper = image.rowRange(i, i + 1).colRange(max(path[i], second_path[i]) + 1, colsize);
             // merge the two subrows and dummy matrix/pixel into a full row
-            if (!lower.empty() && !upper.empty()) {
+            if (!lower.empty() && !middle.empty() && !upper.empty()) {
+                hconcat(lower, middle, new_row);
+                hconcat(new_row, upper, new_row);
+            }
+            else if (!lower.empty() && !upper.empty()) {
                 hconcat(lower, upper, new_row);
-                hconcat(new_row, dummy, new_row);
             }
-            else {
-                if (lower.empty()) {
-                    hconcat(upper, dummy, new_row);
-                }
-                else if (upper.empty()) {
-                    hconcat(lower, dummy, new_row);
-                }
+            else if (!lower.empty() && !middle.empty()) {
+                hconcat(lower, middle, new_row);
             }
+            else if (!middle.empty() && !upper.empty()) {
+                hconcat(middle, upper, new_row);
+            }
+            else if (!lower.empty()) {
+                new_row = lower;
+            }
+            else if (!upper.empty()) {
+                new_row = upper;
+            }
+            hconcat(new_row, dummy2, new_row);
             // take the newly formed row and place it into the original image
             new_row.copyTo(image.row(i));
         }
         // clip the right-most side of the image
-        image = image.colRange(0, colsize - 1);
+        image = image.colRange(0, colsize - 2);
     }
     else if (seam_direction == HORIZONTAL) { // reduce the height
         for (int i = 0; i < colsize; i++) {
@@ -437,8 +539,9 @@ void driver(Mat &image, SeamDirection seam_direction, int iterations) {
     for (int i = 0; i < iterations; i++) {
         Mat energy_image = createEnergyImage(image);
         Mat cumulative_energy_map = createCumulativeEnergyMap(energy_image, seam_direction);
-        vector<int> path = findOptimalSeam(cumulative_energy_map, seam_direction);
-        reduce(image, path, seam_direction);
+        vector<vector<int>> paths = findOptimalSeam(cumulative_energy_map, seam_direction);
+        vector<int> path = paths[0];
+        reduce(image, paths, seam_direction);
         if (demo) {
             showPath(energy_image, path, seam_direction);
         }
