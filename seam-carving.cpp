@@ -226,7 +226,7 @@ vector<int> findOptimalSeam(Mat &cumulative_energy_map, SeamDirection seam_direc
     int offset = 0;
     vector<int> path;
     double min_val, max_val;
-    Point min_pt, max_pt;
+    cv::Point min_pt, max_pt;
     
     // get the number of rows and columns in the cumulative energy map
     int rowsize = cumulative_energy_map.rows;
