@@ -220,7 +220,7 @@ Mat createCumulativeEnergyMap(Mat &energy_image, SeamDirection seam_direction) {
     return cumulative_energy_map;
 }
 
-vector<vector<int>> findOptimalSeam(Mat &cumulative_energy_map, SeamDirection seam_direction) {
+vector<vector<int>> findOptimalSeam(Mat &cumulative_energy_map, SeamDirection seam_direction, bool independent) {
     auto start = std::chrono::high_resolution_clock::now();
     double a,b,c;
     int offset = 0;
@@ -391,11 +391,14 @@ vector<vector<int>> findOptimalSeam(Mat &cumulative_energy_map, SeamDirection se
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
     find_seam_time += elapsed.count();
-    
-    return {path, second_path};
+    if (independent) {
+        return {path, second_path};
+    } else {
+        return {path, {}};
+    }
 }
 
-void reduce(Mat &image, vector<vector<int>> paths, SeamDirection seam_direction) {
+void reduce(Mat &image, vector<vector<int>> paths, SeamDirection seam_direction, int width, bool independent) {
     vector<int> path = paths[0];
     vector<int> second_path = paths[1];
     auto start = std::chrono::high_resolution_clock::now();
@@ -406,71 +409,79 @@ void reduce(Mat &image, vector<vector<int>> paths, SeamDirection seam_direction)
     
     // create a 1x1x3 dummy matrix to add onto the tail of a new row to maintain image dimensions and mark for deletion
     Mat dummy(1, 1, CV_8UC3, Vec3b(0, 0, 0));
-    Mat dummy2(1, 2, CV_8UC3, Vec3b(0, 0, 0));
-    
+    Mat dummy2(1, width, CV_8UC3, Vec3b(0, 0, 0));
     if (seam_direction == VERTICAL) { // reduce the width
-        // for (int i = 0; i < rowsize; i++) {
-        //     // take all pixels to the left and right of marked pixel and store them in appropriate subrow variables
-        //     Mat new_row;
-        //     Mat lower = image.rowRange(i, i + 1).colRange(0, path[i]);
-        //     Mat upper = image.rowRange(i, i + 1).colRange(path[i] + 1, colsize);
-            
-        //     // merge the two subrows and dummy matrix/pixel into a full row
-        //     if (!lower.empty() && !upper.empty()) {
-        //         hconcat(lower, upper, new_row);
-        //         hconcat(new_row, dummy, new_row);
-        //     }
-        //     else {
-        //         if (lower.empty()) {
-        //             hconcat(upper, dummy, new_row);
-        //         }
-        //         else if (upper.empty()) {
-        //             hconcat(lower, dummy, new_row);
-        //         }
-        //     }
-        //     // take the newly formed row and place it into the original image
-        //     new_row.copyTo(image.row(i));
-        // }
-        // // clip the right-most side of the image
-        // image = image.colRange(0, colsize - 1);
-
-
-
-        for (int i = 0; i < rowsize; i++) {
-            // take all pixels to the left and right of marked pixel and store them in appropriate subrow variables
-            Mat new_row;
-            // Mat lower = image.rowRange(i, i + 1).colRange(0, path[i]);
-            // Mat upper = image.rowRange(i, i + 1).colRange(path[i] + 1, colsize);
-            //cout << path[i] << " " << second_path[i] << endl;
-            Mat lower = image.rowRange(i, i + 1).colRange(0, min(path[i], second_path[i]));
-            Mat middle = image.rowRange(i, i + 1).colRange(min(path[i], second_path[i]) + 1, max(path[i], second_path[i]));
-            Mat upper = image.rowRange(i, i + 1).colRange(max(path[i], second_path[i]) + 1, colsize);
-            // merge the two subrows and dummy matrix/pixel into a full row
-            if (!lower.empty() && !middle.empty() && !upper.empty()) {
-                hconcat(lower, middle, new_row);
-                hconcat(new_row, upper, new_row);
+        if (independent) {
+             for (int i = 0; i < rowsize; i++) {
+                // take all pixels to the left and right of marked pixel and store them in appropriate subrow variables
+                Mat new_row;
+                Mat lower = image.rowRange(i, i + 1).colRange(0, min(path[i], second_path[i]));
+                Mat middle = image.rowRange(i, i + 1).colRange(min(path[i], second_path[i]) + 1, max(path[i], second_path[i]));
+                Mat upper = image.rowRange(i, i + 1).colRange(max(path[i], second_path[i]) + 1, colsize);
+                // merge the two subrows and dummy matrix/pixel into a full row
+                if (!lower.empty() && !middle.empty() && !upper.empty()) {
+                    hconcat(lower, middle, new_row);
+                    hconcat(new_row, upper, new_row);
+                }
+                else if (!lower.empty() && !upper.empty()) {
+                    hconcat(lower, upper, new_row);
+                }
+                else if (!lower.empty() && !middle.empty()) {
+                    hconcat(lower, middle, new_row);
+                }
+                else if (!middle.empty() && !upper.empty()) {
+                    hconcat(middle, upper, new_row);
+                }
+                else if (!lower.empty()) {
+                    new_row = lower;
+                }
+                else if (!upper.empty()) {
+                    new_row = upper;
+                }
+                hconcat(new_row, dummy2, new_row);
+                // take the newly formed row and place it into the original image
+                new_row.copyTo(image.row(i));
             }
-            else if (!lower.empty() && !upper.empty()) {
-                hconcat(lower, upper, new_row);
+            // clip the right-most side of the image
+            image = image.colRange(0, colsize - 2);
+        } else {
+            for (int i = 0; i < rowsize; i++) {
+                // take all pixels to the left and right of marked pixel and store them in appropriate subrow variables
+                Mat new_row;
+                bool take_right = false;
+                if (path[i] < colsize - width + 1) {
+                    take_right = true;
+                }
+                Mat lower;
+                Mat upper;
+                if (take_right) {
+                    lower = image.rowRange(i, i + 1).colRange(0, path[i]);
+                    upper = image.rowRange(i, i + 1).colRange(path[i] + width, colsize);
+                } else {
+                    lower  = image.rowRange(i, i + 1).colRange(0, path[i] - width + 1);
+                    upper = image.rowRange(i, i + 1).colRange(path[i] + 1, colsize);
+                }
+                
+                // merge the two subrows and dummy matrix/pixel into a full row
+                if (!lower.empty() && !upper.empty()) {
+                    hconcat(lower, upper, new_row);
+                    hconcat(new_row, dummy2, new_row);
+                }
+                else {
+                    if (lower.empty()) {
+                        hconcat(upper, dummy2, new_row);
+                    }
+                    else if (upper.empty()) {
+                        hconcat(lower, dummy2, new_row);
+                    }
+                }
+                // take the newly formed row and place it into the original image
+                new_row.copyTo(image.row(i));
             }
-            else if (!lower.empty() && !middle.empty()) {
-                hconcat(lower, middle, new_row);
-            }
-            else if (!middle.empty() && !upper.empty()) {
-                hconcat(middle, upper, new_row);
-            }
-            else if (!lower.empty()) {
-                new_row = lower;
-            }
-            else if (!upper.empty()) {
-                new_row = upper;
-            }
-            hconcat(new_row, dummy2, new_row);
-            // take the newly formed row and place it into the original image
-            new_row.copyTo(image.row(i));
+            // clip the right-most side of the image
+            image = image.colRange(0, colsize - width);
         }
-        // clip the right-most side of the image
-        image = image.colRange(0, colsize - 2);
+    
     }
     else if (seam_direction == HORIZONTAL) { // reduce the height
         for (int i = 0; i < colsize; i++) {
@@ -526,7 +537,7 @@ void showPath(Mat &energy_image, vector<int> path, SeamDirection seam_direction)
     namedWindow("Seam on Energy Image", WINDOW_AUTOSIZE); imshow("Seam on Energy Image", energy_image);
 }
 
-void driver(Mat &image, SeamDirection seam_direction, int iterations) {
+void driver(Mat &image, SeamDirection seam_direction, int iterations, int seams_per_iteration) {
     auto start = std::chrono::high_resolution_clock::now();
     
     namedWindow("Original Image", WINDOW_AUTOSIZE); imshow("Original Image", image);
@@ -539,9 +550,9 @@ void driver(Mat &image, SeamDirection seam_direction, int iterations) {
     for (int i = 0; i < iterations; i++) {
         Mat energy_image = createEnergyImage(image);
         Mat cumulative_energy_map = createCumulativeEnergyMap(energy_image, seam_direction);
-        vector<vector<int>> paths = findOptimalSeam(cumulative_energy_map, seam_direction);
+        vector<vector<int>> paths = findOptimalSeam(cumulative_energy_map, seam_direction, false);
         vector<int> path = paths[0];
-        reduce(image, paths, seam_direction);
+        reduce(image, paths, seam_direction, seams_per_iteration, false);
         if (demo) {
             showPath(energy_image, path, seam_direction);
         }
@@ -576,10 +587,11 @@ void driver(Mat &image, SeamDirection seam_direction, int iterations) {
 }
 
 int main() {
-    string filename, reduce_direction, width_height, s_iterations, gif, threads;
+    string filename, reduce_direction, width_height, s_iterations, gif, threads, s_seams_per_iteration;
     SeamDirection seam_direction;
     int iterations;
     int num_threads = 0;
+    int seams_per_iteration;
 
     cout << "Please enter a filename: ";
     cin >> filename;
@@ -610,6 +622,10 @@ int main() {
     
     cout << "Reduce " << width_height << " how many times? ";
     cin >> s_iterations;
+
+    cout << "How many seams would you like to remove per iteration? ";
+    cin >> s_seams_per_iteration;
+    seams_per_iteration = stoi(s_seams_per_iteration);
 
     cout << "Would you like to save as gif? (1 for yes | 0 for no) ";
     cin >> gif;
@@ -643,7 +659,7 @@ int main() {
     
     if (demo) iterations = 1;
     
-    driver(image, seam_direction, iterations);
+    driver(image, seam_direction, iterations, seams_per_iteration);
 
     return 0;
 }
