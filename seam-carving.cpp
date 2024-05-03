@@ -447,10 +447,11 @@ void driver(Mat &image, SeamDirection seam_direction, int iterations) {
 }
 
 int main() {
-    string filename, reduce_direction, width_height, s_iterations, gif;
+    string filename, reduce_direction, width_height, s_iterations, gif, threads;
     SeamDirection seam_direction;
     int iterations;
-    
+    int num_threads = 0;
+
     cout << "Please enter a filename: ";
     cin >> filename;
     
@@ -484,6 +485,11 @@ int main() {
     cout << "Would you like to save as gif? (1 for yes | 0 for no) ";
     cin >> gif;
     save_gif = (gif == "1");
+
+    cout << "Enter the number of threads: ";
+    cin >> threads;
+    num_threads = stoi(threads);
+    omp_set_num_threads(num_threads);
     
     iterations = stoi(s_iterations);
     int rowsize = image.rows;
