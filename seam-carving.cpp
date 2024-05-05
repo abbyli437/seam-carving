@@ -91,6 +91,7 @@ Mat createCumulativeEnergyMap(Mat &energy_image, SeamDirection seam_direction) {
     if (seam_direction == VERTICAL) {
         const int JUMP = 90; // choose something even
         const int BASE = (JUMP - 1) * 2;
+        // naive parallel approach:
         // for (int row = 1; row < rowsize; row++) {
         //     #pragma omp parallel for private(a, b, c)
         //     for (int col = 0; col < colsize; col++) {
@@ -146,6 +147,7 @@ Mat createCumulativeEnergyMap(Mat &energy_image, SeamDirection seam_direction) {
     else if (seam_direction == HORIZONTAL) {
         const int JUMP = 90; // choose something even
         const int BASE = (JUMP - 1) * 2;
+        // naive parallel approach:
         // for (int col = 1; col < colsize; col++) {
         //     #pragma omp parallel for private(a, b, c)
         //     for (int row = 0; row < rowsize; row++) {
